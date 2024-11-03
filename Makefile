@@ -1,6 +1,6 @@
 CFLAGS = -Wall -Werror -g
 
-all: server client
+all: server client del
 
 server: server.o
 	$(CC) $(CFLAGS) -o server server.o -lpthread
@@ -14,6 +14,9 @@ client: client.o
 
 client.o: client.c
 	$(CC) $(CFLAGS) -c client.c
+
+del:
+	rm -f *.o
 
 clean:
 	rm -f *.o server client

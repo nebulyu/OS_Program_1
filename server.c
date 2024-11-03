@@ -372,21 +372,49 @@ void Local_C(REQUEST *new_request,char *ip,char *port){
 }
 void Local_L(REQUEST *new_request){
     REQUEST *current = request_head;
+    size_t result_size = 1024;  // Initial size, adjust as needed
+    char *result = malloc(result_size);
+    if (!result) {
+        perror("Memory allocation failed");
+        return;
+    }
+    result[0] = '\0';
+
     while(current != new_request){
         if(current->is_valid_rule){
-            printf("Rule: ");
-            if(current->src_ip == current->dst_ip) printf("%s ",current->src_ip);
-            else printf("%s-%s ",current->src_ip,current->dst_ip);
-            if(current->src_port == current->dst_port) printf("%d\n",current->src_port);
-            else printf("%d-%d\n",current->src_port,current->dst_port);
+            if (strlen(result) + strlen(current->command) + 2 > result_size) {
+                result_size *= 2;
+                result = realloc(result, result_size);
+                if (!result) {
+                    perror("Memory reallocation failed");
+                    return;
+                }
+            }
+
+            strcat(result, "Rule: ");
+            strcat(result,current->src_ip);
+            if(current->src_ip == current->dst_ip) ;
+            else strcat(result, "-"),strcat(result,current->dst_ip);
+            strcat(result," ");
+
+
+            char port_buffer[12];  // Buffer to hold the port number as a string
+            sprintf(port_buffer, "%d", current->src_port);
+            strcat(result, port_buffer);
+            sprintf(port_buffer, "%d", current->dst_port);
+            if(current->src_port == current->dst_port);
+            else strcat(result,"-"),strcat(result,port_buffer);
+            strcat(result,"\n");
+
             QUERY *current_query = current->query_head;
             while(current_query != NULL){
-                printf("Query: %s",current_query->command);
+                strcat(result,"Query: "),strcat(result,current_query->command);
                 current_query = current_query->next;
             }
         }
         current = current->next;
     }
+    printf("%s", result);
 }
 void Local_D(REQUEST *new_request,char *ips,char *ports){
     fill_rule(new_request,ips,ports);
@@ -401,6 +429,7 @@ void Local_D(REQUEST *new_request,char *ips,char *ports){
     pthread_mutex_lock(&mutex_DD);
     pthread_mutex_lock(&mutex_DA);
     pthread_mutex_lock(&mutex_DC);
+    pthread_mutex_lock(&mutex_DL);
     REQUEST *current = request_head;
     bool result = false;
     while(current != new_request){
@@ -412,6 +441,7 @@ void Local_D(REQUEST *new_request,char *ips,char *ports){
         }
         current = current->next;
     }
+    pthread_mutex_unlock(&mutex_DL);
     pthread_mutex_unlock(&mutex_DC);
     pthread_mutex_unlock(&mutex_DA);
     pthread_mutex_unlock(&mutex_DD);
