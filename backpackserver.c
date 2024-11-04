@@ -476,7 +476,7 @@ void Local_illegal(){
 
 void *localRequest(void *args) {
     char *buffer = (char *)args;
-    // printf("Localreq: %s", buffer);
+    printf("Localreq: %s\n", buffer);
 
     REQUEST *new_request = create_request(buffer);
     char *token = strtok(buffer, " ");
@@ -498,25 +498,40 @@ void *localRequest(void *args) {
     else if(part_count == 3 && parts[0][0] == 'C') Local_C(new_request,parts[1],parts[2]);
     else Local_illegal();
     fflush(stdout);
+
+    // free(buffer);  // Free the allocated memory
     pthread_exit(NULL);  // Exit the thread
+}
+int cntt = 0;
+void local_create(char *buffer) {
+
+    char *thread_arg = strdup(buffer);  // Duplicate the buffer to pass to the thread
+
+    if (thread_arg == NULL) {
+        perror("Failed to allocate memory");
+        exit(EXIT_FAILURE);
+    }
+
+    // ++cntt;
+    // printf("cntt:%d\n",cntt);       
+
+    fflush(stdout);
+
+    pthread_t local_thread;
+    if (pthread_create(&local_thread, NULL, localRequest, (void *)thread_arg) != 0) {
+        perror("Thread creation failed");
+        free(thread_arg);  // Free the allocated memory on error
+        exit(EXIT_FAILURE);
+    }
+    // else printf("Create: %s\n", thread_arg);
+    // fflush(stdout);
+    pthread_detach(local_thread);  // Detach thread to allow resources to be reclaimed after it finishes
+    // free(thread_arg);  // Free the buffer allocated by getline
 }
 void local_main(int argc, char *argv[]) {
     char buffer[DEFAULTBUFFERLENGTH];
     while (fgets(buffer, DEFAULTBUFFERLENGTH, stdin) != NULL){
-        volatile char *thread_arg = strdup(buffer);
-        if (thread_arg == NULL) {
-            perror("Failed to allocate memory");
-            exit(EXIT_FAILURE);
-        }
-        fflush(stdout);
-
-        pthread_t local_thread;
-        __sync_synchronize();
-        pthread_create(&local_thread, NULL, localRequest, (void *)thread_arg);
-        // else printf("Thread created %s\n",thread_arg);
-        // pthread_detach(local_thread);
-        pthread_join(local_thread, NULL);
-        // free(thread_arg);  // Free the allocated memory
+        local_create(buffer);
         fflush(stdin);
     }
 }
