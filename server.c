@@ -86,6 +86,11 @@ bool check_ip_valid(char *ip) {
         if (num < 0 || num > 255) return false;
         token = strtok(NULL, ".");
         ++cnt;
+        // FILE *log_file = fopen("log.txt", "a");
+        // fprintf(log_file, "num:%d\n", num);
+        // fclose(log_file);
+        
+
     }
     // printf("cnt:%d\n",cnt);
     if (cnt != 4) return false;
@@ -93,21 +98,38 @@ bool check_ip_valid(char *ip) {
 }
 //默认ip地址为合法的
 bool cmp_id_ord(char *ip1,char *ip2){
-    char ip1_copy[16],ip2_copy[16];
-    strncpy(ip1_copy, ip1, sizeof(ip1_copy));
-    strncpy(ip2_copy, ip2, sizeof(ip2_copy));
-    ip1_copy[sizeof(ip1_copy) - 1] = '\0'; 
-    ip2_copy[sizeof(ip2_copy) - 1] = '\0'; 
-    char *token1 = strtok(ip1_copy, ".");
-    char *token2 = strtok(ip2_copy, ".");
-    while (token1 != NULL && token2 != NULL) {
-        int num1 = atoi(token1);
-        int num2 = atoi(token2);
-        if(num1 < num2) return true;
-        else if(num1 > num2) return false;
-        token1 = strtok(NULL, ".");
-        token2 = strtok(NULL, ".");
+    char *ip1_copy = strdup(ip1);
+    char *ip2_copy = strdup(ip2);
+    char *token = strtok(ip1_copy, ".");
+    int rec1[4],rec2[4],p=0;
+    while (token != NULL) {
+        rec1[p]=atoi(token);
+        token = strtok(NULL, ".");
+        ++p;
     }
+    p=0;
+    token = strtok(ip2_copy, ".");
+    while (token != NULL) {
+        rec2[p]=atoi(token);
+        token = strtok(NULL, ".");
+        ++p;
+    }
+    for(int i=0;i<4;++i){
+        if(rec1[i] < rec2[i]) return true;
+        if(rec1[i] > rec2[i]) return false;
+    }
+    // FILE *log_file = fopen("log.txt", "a");
+    // fprintf(log_file, "ip1:%s ip2:%s\n", ip1,ip2);
+    // for(int i=0;i<4;++i){
+    //     fprintf(log_file, "rec1:%d\t", rec1[i]);
+    // }
+    // fprintf(log_file, "\n");
+    // for(int i=0;i<4;++i){
+    //     fprintf(log_file, "rec2:%d\t", rec2[i]);
+    // }
+    // fprintf(log_file, "\n");
+    // fclose(log_file);
+    
     return true;
 
 }
@@ -123,7 +145,7 @@ void fill_rule(REQUEST *rule,char *ips,char *ports){
     char *ip_token = strtok(ips, "-");
     rule->src_ip = strdup(ip_token);
     ip_token = strtok(NULL, "-");
-    if(ip_token == NULL)rule->dst_ip=rule->src_ip;
+    if(ip_token == NULL)rule->dst_ip=strdup(rule->src_ip);
     else rule->dst_ip = strdup(ip_token);
 
     char *port_token = strtok(ports, "-");
@@ -148,18 +170,18 @@ bool check_request_equal_rule(REQUEST *rule,REQUEST *request){
 }
 
 
-char* Server_R(char *buffer){
-    REQUEST *new_request = create_request(buffer);
+
+char *Command_R(REQUEST *new_request){
     REQUEST *current = request_head;
     // Allocate memory for the result buffer
     size_t result_size = 1024;  // Initial size, adjust as needed
     //注意此处不可直接动态,初始值赋为""
     //这个指向静态地址的指针会导致strcat时出现段错误
     char *result = malloc(result_size);
-    if (!result) {
-        perror("Memory allocation failed");
-        return "";
-    }
+    // if (!result) {
+    //     perror("Memory allocation failed");
+    //     return;
+    // }
     result[0] = '\0';  // Initialize the result buffer
 
     while (1) {
@@ -167,10 +189,10 @@ char* Server_R(char *buffer){
         if (strlen(result) + strlen(current->command) + 2 > result_size) {
             result_size *= 2;
             result = realloc(result, result_size);
-            if (!result) {
-                perror("Memory reallocation failed");
-                return "";
-            }
+            // if (!result) {
+            //     perror("Memory reallocation failed");
+            //     return;
+            // }
         }
 
         strcat(result, current->command);
@@ -184,120 +206,7 @@ char* Server_R(char *buffer){
     }
     return result;
 }
-char* Server_illegal(char *buffer){
-    create_request(buffer);
-    char *result = "Illegal request";
-    return result;
-}
-// Function to process each client request in a separate thread
-void *serverRequest(void *args) {
-    int *newsockfd = (int *)args;  // Get the client socket file descriptor
-    char buffer[DEFAULTBUFFERLENGTH] = {0};  // Buffer to store client messages
-
-    // Read message from client
-    int n = read(*newsockfd, buffer, DEFAULTBUFFERLENGTH - 1);
-    if (n < 0) error("ERROR reading from socket");  // Handle read error
-
-    printf("Here is the message: %s\n", buffer);  // Print the client's message
-
-    char *result = NULL;  // Buffer to store response message
-
-    if (buffer[0] == 'R') {
-        result = Server_R(buffer);
-    }
-    else {
-        result = Server_illegal(buffer);
-    }
-
-    // Send response to client
-    snprintf(buffer, DEFAULTBUFFERLENGTH,"%s",result);  // Prepare response message
-    n = write(*newsockfd, buffer, strlen(buffer));  // Write response to client
-    if (n < 0) error("ERROR writing to socket");  // Handle write error
-
-    close(*newsockfd);  // Close client socket
-    free(newsockfd);  // Free memory allocated for client socket descriptor
-    pthread_exit(NULL);  // Exit the thread
-}
-void server_main(int argc, char *argv[]){
-    if (argc < 2) {
-        fprintf(stderr, "ERROR, no port provided\n");  // Print error message
-        exit(1);  // Exit program with error status
-    }
-
-    // Create socket for IPv6 using TCP
-    int sockfd = socket(AF_INET6, SOCK_STREAM, 0);
-    if (sockfd < 0) error("ERROR opening socket");  // Handle socket creation error
-
-    // Set up server address structure
-    struct sockaddr_in6 serv_addr = {0};
-    serv_addr.sin6_family = AF_INET6;  // Use IPv6
-    serv_addr.sin6_addr = in6addr_any;  // Accept connections from any address
-    serv_addr.sin6_port = htons(atoi(argv[1]));  // Set port number in network byte order
-
-    // Bind socket to the server address and port
-    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");  // Handle binding error
-
-    // Listen for incoming connections
-    listen(sockfd, 5);  // Set the socket to listen, with a maximum backlog of 5
-
-    while (1) {
-        // Accept new client connection
-        struct sockaddr_in6 cli_addr;
-        socklen_t clilen = sizeof(cli_addr);
-        int *newsockfd = malloc(sizeof(int));  // Allocate memory for new client socket descriptor
-        if (!newsockfd) error("Memory allocation failed");  // Handle memory allocation error
-
-        *newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);  // Accept incoming client connection
-        if (*newsockfd < 0) error("ERROR on accept");  // Handle accept error
-
-        // Create thread to handle the client connection
-        pthread_t server_thread;
-        if (pthread_create(&server_thread, NULL, serverRequest, (void *)newsockfd) != 0) error("Thread creation failed");  // Handle thread creation error
-
-        pthread_detach(server_thread);  // Detach thread to allow resources to be reclaimed after it finishes
-    }
-
-    close(sockfd);  // Close the server socket
-}
-
-void Local_R(REQUEST *new_request){
-    REQUEST *current = request_head;
-    // Allocate memory for the result buffer
-    size_t result_size = 1024;  // Initial size, adjust as needed
-    //注意此处不可直接动态,初始值赋为""
-    //这个指向静态地址的指针会导致strcat时出现段错误
-    char *result = malloc(result_size);
-    if (!result) {
-        perror("Memory allocation failed");
-        return;
-    }
-    result[0] = '\0';  // Initialize the result buffer
-
-    while (1) {
-        // Check if we need to reallocate more memory for result
-        if (strlen(result) + strlen(current->command) + 2 > result_size) {
-            result_size *= 2;
-            result = realloc(result, result_size);
-            if (!result) {
-                perror("Memory reallocation failed");
-                return;
-            }
-        }
-
-        strcat(result, current->command);
-
-        if (request_head == request_tail) break;
-        current = current->next;
-        if (current == new_request) {
-            strcat(result, current->command);
-            break;
-        }
-    }
-
-    printf("%s", result);
-    free(result);  // Free the allocated memory
-}
-void Local_A(REQUEST *new_request,char *ips,char *ports){
+char *Command_A(REQUEST *new_request,char *ips,char *ports){
     pthread_mutex_lock(&mutex_A);
     if(!count_A)
         pthread_mutex_lock(&mutex_DA);
@@ -309,27 +218,27 @@ void Local_A(REQUEST *new_request,char *ips,char *ports){
     new_request->is_valid_rule = check_rule_valid(*new_request);
     bool result = new_request->is_valid_rule;
 
+    // FILE *log_file = fopen("log.txt", "a");
+    // fprintf(log_file, "src_ip:%s dst_ip:%s src_port:%d dst_port:%d\n", new_request->src_ip,new_request->dst_ip,new_request->src_port,new_request->dst_port);
+    // fprintf(log_file, "check_sip_valid:%d check_dip_valid:%d cmp_id_ord:%d\n", check_ip_valid(new_request->src_ip),check_ip_valid(new_request->dst_ip),cmp_id_ord(new_request->src_ip,new_request->dst_ip));
+    // fclose(log_file);
+
     pthread_mutex_lock(&mutex_A);
     --count_A;
     if(!count_A)
         pthread_mutex_unlock(&mutex_DA);
     pthread_mutex_unlock(&mutex_A);
 
-    if(result)printf("Rule added\n");
-    else printf("Invalid rule\n");
-    fflush(stdout);
+    if(result) return "Rule added\n";
+    else return "Invalid rule\n";
 }
-void Local_C(REQUEST *new_request,char *ip,char *port){
+char *Command_C(REQUEST *new_request,char *ip,char *port){
     if(!check_ip_valid(ip) || !check_port_valid(atoi(port))) {
-        printf("Illegal IP address or port specified\n");
-        fflush(stdout);
-        return;
+        return "Illegal IP address or port specified\n";
     } 
     fill_rule(new_request,ip,port);
     if(new_request->src_port!=new_request->dst_port || strcmp(new_request->src_ip,new_request->dst_ip)){
-        printf("Illegal IP address or port specified\n");
-        fflush(stdout);
-        return;
+        return "Illegal IP address or port specified\n";
     }
 
     pthread_mutex_lock(&mutex_C);
@@ -366,21 +275,17 @@ void Local_C(REQUEST *new_request,char *ip,char *port){
         pthread_mutex_unlock(&mutex_DC);
     pthread_mutex_unlock(&mutex_C);
 
-    if(!result) printf("Connection rejected\n");
-    else printf("Connection accepted\n");
-    fflush(stdout);
-    
-
-    
+    if(!result) return "Connection rejected\n";
+    else return "Connection accepted\n";
 }
-void Local_L(REQUEST *new_request){
+char *Command_L(REQUEST *new_request){
     REQUEST *current = request_head;
     size_t result_size = 1024;  // Initial size, adjust as needed
     char *result = malloc(result_size);
-    if (!result) {
-        perror("Memory allocation failed");
-        return;
-    }
+    // if (!result) {
+    //     perror("Memory allocation failed");
+    //     return;
+    // }
     result[0] = '\0';
 
     pthread_mutex_lock(&mutex_L);
@@ -394,10 +299,10 @@ void Local_L(REQUEST *new_request){
             if (strlen(result) + strlen(current->command) + 2 > result_size) {
                 result_size *= 2;
                 result = realloc(result, result_size);
-                if (!result) {
-                    perror("Memory reallocation failed");
-                    return;
-                }
+                // if (!result) {
+                //     perror("Memory reallocation failed");
+                //     return;
+                // }
             }
 
             strcat(result, "Rule: ");
@@ -430,20 +335,16 @@ void Local_L(REQUEST *new_request){
         pthread_mutex_unlock(&mutex_DL);
     pthread_mutex_unlock(&mutex_L);
 
-    printf("%s", result);
-    fflush(stdout);
+    return result;
 }
-void Local_D(REQUEST *new_request,char *ips,char *ports){
+char *Command_D(REQUEST *new_request,char *ips,char *ports){
     fill_rule(new_request,ips,ports);
     new_request->is_valid_rule = true;
     bool rule_valid = check_rule_valid(*new_request);
     new_request->is_valid_rule = false;
     if(!rule_valid){
-        printf("Rule invalid\n");
-        fflush(stdout);
-        return ;
+        return "Rule invalid\n";
     }
-
     pthread_mutex_lock(&mutex_DD);
     pthread_mutex_lock(&mutex_DA);
     pthread_mutex_lock(&mutex_DC);
@@ -464,22 +365,41 @@ void Local_D(REQUEST *new_request,char *ips,char *ports){
     pthread_mutex_unlock(&mutex_DA);
     pthread_mutex_unlock(&mutex_DD);
 
-    if(result) printf("Rule deleted\n");
-    else printf("Rule not found\n");
-    fflush(stdout);
+
     
+    if(result) return "Rule deleted\n";
+    else return "Rule not found\n";
 }
-void Local_illegal(){
-    printf("Illegal request\n");
-    fflush(stdout);
+char * Command_illegal(){
+    return "Illegal request\n";
 }
 
-void *localRequest(void *args) {
-    char *buffer = (char *)args;
-    // printf("Localreq: %s", buffer);
+void *Request(void *args) {
+    char *command = "";
+    int *newsockfd = NULL;
+    int n=0;
+    if(islocal){
+        char *buffer = (char *)args;
+        command = strdup(buffer);
+    }
+    else{
+        newsockfd = (int *)args;  // Get the client socket file descriptor
+        char buffer[DEFAULTBUFFERLENGTH] = {0};  // Buffer to store client messages
 
-    REQUEST *new_request = create_request(buffer);
-    char *token = strtok(buffer, " ");
+        // Read message from client
+        n = read(*newsockfd, buffer, DEFAULTBUFFERLENGTH - 1);
+        if (n < 0) error("ERROR reading from socket");  // Handle read error
+        command = strdup(buffer);
+        // printf("Received: %s\n", command);
+    }
+
+    
+    // printf("Received: %s\n", command);
+    
+    // if (n < 0) error("ERROR reading from socket");  // Handle read error
+
+    REQUEST *new_request = create_request(command);
+    char *token = strtok(command, " ");
     int part_count = 0;
     char *parts[3] = {NULL, NULL, NULL};  // Array to store the first three parts
 
@@ -491,36 +411,107 @@ void *localRequest(void *args) {
         part_count++;
         token = strtok(NULL, " ");
     }
-    if(part_count == 1 && parts[0][0] == 'R') Local_R(new_request);
-    else if(part_count == 1 && parts[0][0] == 'L') Local_L(new_request);
-    else if(part_count == 3 && parts[0][0] == 'A') Local_A(new_request,parts[1],parts[2]);
-    else if(part_count == 3 && parts[0][0] == 'D') Local_D(new_request,parts[1],parts[2]);
-    else if(part_count == 3 && parts[0][0] == 'C') Local_C(new_request,parts[1],parts[2]);
-    else Local_illegal();
-    fflush(stdout);
+
+    FILE *log_file = fopen("log.txt", "a");
+    fprintf(log_file, "p0:%s", parts[0]);
+    if (part_count > 1) fprintf(log_file, " p1:%s", parts[1]);
+    if (part_count > 2) fprintf(log_file, " p2:%s", parts[2]);
+    fclose(log_file);
+
+
+    char *result = NULL;
+    if(part_count == 1 && parts[0][0] == 'R') result = Command_R(new_request);
+    else if(part_count == 1 && parts[0][0] == 'L') result = Command_L(new_request);
+    else if(part_count == 3 && parts[0][0] == 'A') result = Command_A(new_request,parts[1],parts[2]);
+    else if(part_count == 3 && parts[0][0] == 'D') result = Command_D(new_request,parts[1],parts[2]);
+    else if(part_count == 3 && parts[0][0] == 'C') result = Command_C(new_request,parts[1],parts[2]);
+    else result =  Command_illegal();
+
+
+    if(islocal){
+        printf("%s", result);
+        // fflush(stdout);
+    }
+    else{
+        snprintf(command, DEFAULTBUFFERLENGTH,"%s",result);  // Prepare response message
+        n = write(*newsockfd, command, strlen(command));  // Write response to client
+        if (n < 0) error("ERROR writing to socket");  // Handle write error
+        close(*newsockfd);  // Close client socket
+    }
+    free(newsockfd);
     pthread_exit(NULL);  // Exit the thread
 }
+
+void server_main(int argc, char *argv[]){
+    if (argc < 2) {
+        fprintf(stderr, "ERROR, no port provided\n");  // Print error message
+        exit(1);  // Exit program with error status
+    }
+
+    // Create socket for IPv6 using TCP
+    int sockfd = socket(AF_INET6, SOCK_STREAM, 0);
+    if (sockfd < 0) error("ERROR opening socket");  // Handle socket creation error
+
+    // Set up server address structure
+    struct sockaddr_in6 serv_addr = {0};
+    serv_addr.sin6_family = AF_INET6;  // Use IPv6
+    serv_addr.sin6_addr = in6addr_any;  // Accept connections from any address
+    serv_addr.sin6_port = htons(atoi(argv[1]));  // Set port number in network byte order
+
+    // Bind socket to the server address and port
+    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");  // Handle binding error
+
+    // Listen for incoming connections
+    listen(sockfd, 5);  // Set the socket to listen, with a maximum backlog of 5
+
+    while (1) {
+        // Accept new client connection
+        struct sockaddr_in6 cli_addr;
+        socklen_t clilen = sizeof(cli_addr);
+        int *newsockfd = malloc(sizeof(int));  // Allocate memory for new client socket descriptor
+        if (!newsockfd) error("Memory allocation failed");  // Handle memory allocation error
+
+        *newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);  // Accept incoming client connection
+        if (*newsockfd < 0) error("ERROR on accept");  // Handle accept error
+
+        // Create thread to handle the client connection
+        pthread_t server_thread;
+        if (pthread_create(&server_thread, NULL, Request, (void *)newsockfd) != 0) error("Thread creation failed");  // Handle thread creation error
+
+        pthread_detach(server_thread);  // Detach thread to allow resources to be reclaimed after it finishes
+    }
+
+    close(sockfd);  // Close the server socket
+}
+
+
 void local_main(int argc, char *argv[]) {
     char buffer[DEFAULTBUFFERLENGTH];
     while (fgets(buffer, DEFAULTBUFFERLENGTH, stdin) != NULL){
         volatile char *thread_arg = strdup(buffer);
-        if (thread_arg == NULL) {
-            perror("Failed to allocate memory");
-            exit(EXIT_FAILURE);
-        }
-        fflush(stdout);
-
+        // fflush(stdout);
+        FILE *log_file = fopen("log.txt", "a");
+        fprintf(log_file, "Received: %s\n", thread_arg);
+        
         pthread_t local_thread;
-        __sync_synchronize();
-        pthread_create(&local_thread, NULL, localRequest, (void *)thread_arg);
-        // else printf("Thread created %s\n",thread_arg);
+        // __sync_synchronize();
+        if (pthread_create(&local_thread, NULL, Request, (void *)thread_arg) != 0) {
+            fprintf(log_file, "fail to create\n");
+        }
+        else fprintf(log_file, "Create: %s\n", thread_arg);
+        fclose(log_file);
         // pthread_detach(local_thread);
         pthread_join(local_thread, NULL);
-        // free(thread_arg);  // Free the allocated memory
-        fflush(stdin);
+        // fflush(stdin);
     }
 }
 int main(int argc, char *argv[]) {
+
+    FILE *log_file = fopen("log.txt", "w");
+    if (log_file != NULL) 
+        fclose(log_file);
+
+    setvbuf(stdout, NULL, _IONBF, 0);
     if(argc == 2){
         if(!strcmp("-i",argv[1])) islocal = 1;
     }

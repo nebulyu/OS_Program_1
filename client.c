@@ -27,11 +27,21 @@ int main(int argc, char *argv[]) {
     hints.ai_socktype = SOCK_STREAM;  // Use TCP (stream socket)
 
     // Get address info for server based on hostname and port
+    
+
     int res = getaddrinfo(argv[1], argv[2], &hints, &result);
     if (res != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));  // Print error if getaddrinfo fails
         exit(EXIT_FAILURE);  // Exit program with error status
     }
+
+    char buffer[BUFFERLENGTH] = {0};
+    for(int i=3;i<argc;i++){
+        strcat(buffer,argv[i]);
+        if(i<argc-1) strcat(buffer," ");
+        else strcat(buffer,"\n");
+    }
+    // printf("Here is the message: %s\n", buffer);
 
     int sockfd;
     // Try each address returned by getaddrinfo until a successful connection is made
@@ -52,9 +62,9 @@ int main(int argc, char *argv[]) {
     freeaddrinfo(result);  // Free the memory allocated for the address info
 
     // Get message from user to send to the server
-    char buffer[BUFFERLENGTH] = {0};
-    printf("Please enter the message: ");  // Prompt user for input
-    fgets(buffer, BUFFERLENGTH, stdin);  // Read user input into buffer
+      // Print the message to be sent
+    // printf("Please enter the message: ");  // Prompt user for input
+    // fgets(buffer, BUFFERLENGTH, stdin);  // Read user input into buffer
 
     // Write message to server
     if (write(sockfd, buffer, strlen(buffer)) < 0) error("ERROR writing to socket");  // Send data to server
@@ -63,7 +73,7 @@ int main(int argc, char *argv[]) {
     bzero(buffer, BUFFERLENGTH);  // Clear the buffer
     if (read(sockfd, buffer, BUFFERLENGTH - 1) < 0) error("ERROR reading from socket");  // Read response from server
 
-    printf("%s\n", buffer);  // Print the server's response
+    printf("%s", buffer);  // Print the server's response
     close(sockfd);  // Close the socket
     return 0;  // Exit program successfully
 }
