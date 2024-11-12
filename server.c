@@ -147,6 +147,8 @@ bool cmp_id_ord(char *ip1,char *ip2){
         token = strtok(NULL, ".");
         ++p;
     }
+    free(ip1_copy);
+    free(ip2_copy);
     for(int i=0;i<4;++i){
         if(rec1[i] < rec2[i]) return true;
         if(rec1[i] > rec2[i]) return false;
@@ -405,7 +407,6 @@ char *Command_D(REQUEST *new_request,char *ips,char *ports){
     pthread_mutex_unlock(&mutex_DA);
     pthread_mutex_unlock(&mutex_DD);
 
-    
     if(result) return "Rule deleted\n";
     else return "Rule not found\n";
 }
