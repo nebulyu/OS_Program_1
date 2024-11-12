@@ -11,13 +11,12 @@
 
 #define DEFAULTBUFFERLENGTH 256  // Define the buffer length for messages
 int islocal = 0;
-// Function to handle errors and print messages
+
 void error(char *msg) {
     perror(msg);  // Print error message
     exit(1);  // Exit program with error status
 }
 
-int isExecuted = 0;  // Shared variable to keep track of requests
 pthread_mutex_t mutex_cnt = PTHREAD_MUTEX_INITIALIZER;  // Mutex to synchronize access to shared variable
 
 pthread_mutex_t mutex_newrequest = PTHREAD_MUTEX_INITIALIZER;  // Mutex to synchronize access to shared variable
@@ -28,33 +27,67 @@ pthread_mutex_t mutex_L = PTHREAD_MUTEX_INITIALIZER;  // Mutex to synchronize ac
 pthread_mutex_t mutex_DA = PTHREAD_MUTEX_INITIALIZER;  // Mutex to synchronize access to shared variable
 pthread_mutex_t mutex_DC = PTHREAD_MUTEX_INITIALIZER;  // Mutex to synchronize access to shared variable
 pthread_mutex_t mutex_DL = PTHREAD_MUTEX_INITIALIZER;  // Mutex to synchronize access to shared variable
+pthread_mutex_t mutex_LC = PTHREAD_MUTEX_INITIALIZER;
 
 int count_A = 0;
 int count_C = 0;
 int count_L = 0;
+
+int cnt_command = 0;
 
 typedef struct QUERY{
     char *command;
     struct QUERY *next;
 }QUERY;
 typedef struct REQUEST{
-    char *command;
     struct REQUEST *next;
     char * src_ip,*dst_ip;
     int src_port,dst_port;
+    int cnt;
     QUERY *query_head,*query_tail;
     bool is_valid_rule;
 }REQUEST;
 REQUEST *request_head = NULL;
 REQUEST *request_tail = NULL; 
 
+char **command_array = NULL;
+int command_capacity = 2;  // 当前容量
+int command_cnt = 0;  // 当前已存储的字符串数量
+
+void initialize(){
+    command_array = malloc(command_capacity * sizeof(char *));
+    if (command_array == NULL) {
+        error("Failed to allocate memory");
+    }
+}
+void add_command(const char *str) {
+    // 检查是否需要扩展数组
+    if (command_cnt >= command_capacity) {
+        command_capacity *= 2;  // 每次扩展两倍
+        char **new_array = realloc(command_array, command_capacity * sizeof(char *));
+        if (new_array == NULL) {
+            error("Failed to reallocate memory");
+        }
+        command_array = new_array;
+    }
+
+    // 为新字符串分配内存并存储
+    command_array[command_cnt] = malloc((strlen(str) + 1) * sizeof(char));
+    if (command_array[command_cnt] == NULL) {
+        error("Failed to allocate memory for string");
+    }
+    strcpy(command_array[command_cnt], str);  // 复制字符串
+    command_cnt++;
+}
 
 REQUEST *create_request(char *command){
     pthread_mutex_lock(&mutex_newrequest);  // Acquire the lock to ensure exclusive access
     REQUEST *new_request = (REQUEST *)malloc(sizeof(REQUEST));
-    new_request->command = strdup(command);
     new_request->is_valid_rule = false;
     new_request->next = NULL;
+    ++cnt_command;
+    add_command(command);
+    new_request->cnt = cnt_command;
     if(request_head == NULL){
         request_head = new_request;
         request_tail = new_request;
@@ -118,17 +151,6 @@ bool cmp_id_ord(char *ip1,char *ip2){
         if(rec1[i] < rec2[i]) return true;
         if(rec1[i] > rec2[i]) return false;
     }
-    // FILE *log_file = fopen("log.txt", "a");
-    // fprintf(log_file, "ip1:%s ip2:%s\n", ip1,ip2);
-    // for(int i=0;i<4;++i){
-    //     fprintf(log_file, "rec1:%d\t", rec1[i]);
-    // }
-    // fprintf(log_file, "\n");
-    // for(int i=0;i<4;++i){
-    //     fprintf(log_file, "rec2:%d\t", rec2[i]);
-    // }
-    // fprintf(log_file, "\n");
-    // fclose(log_file);
     
     return true;
 
@@ -169,41 +191,42 @@ bool check_request_equal_rule(REQUEST *rule,REQUEST *request){
     return false;
 }
 
-
+// void tranv(){
+//     REQUEST *current = request_head;
+//     while(current != NULL){
+//         printf("cnt:%d command:%s\n",current->cnt,current->command);
+//         current = current->next;
+//     }
+// }
 
 char *Command_R(REQUEST *new_request){
-    REQUEST *current = request_head;
     // Allocate memory for the result buffer
     size_t result_size = 1024;  // Initial size, adjust as needed
     //注意此处不可直接动态,初始值赋为""
     //这个指向静态地址的指针会导致strcat时出现段错误
     char *result = malloc(result_size);
-    // if (!result) {
-    //     perror("Memory allocation failed");
-    //     return;
-    // }
+    if (!result) {
+        error("Memory allocation failed");
+        return "";
+    }
     result[0] = '\0';  // Initialize the result buffer
 
-    while (1) {
-        // Check if we need to reallocate more memory for result
-        if (strlen(result) + strlen(current->command) + 2 > result_size) {
+    int goal = new_request->cnt;
+
+    for (int i=0;i<goal;++i){
+        // printf("i:%d goal:%d\n",i,goal);
+        if (strlen(result) + strlen(command_array[i]) + 2 > result_size) {
             result_size *= 2;
             result = realloc(result, result_size);
-            // if (!result) {
-            //     perror("Memory reallocation failed");
-            //     return;
-            // }
+            if (!result) {
+                error("Memory reallocation failed");
+                break;
+            }
         }
-
-        strcat(result, current->command);
-
-        if (request_head == request_tail) break;
-        current = current->next;
-        if (current == new_request) {
-            strcat(result, current->command);
-            break;
-        }
+        strcat(result, command_array[i]);
+        // strcat(result, "\n");
     }
+    
     return result;
 }
 char *Command_A(REQUEST *new_request,char *ips,char *ports){
@@ -218,10 +241,6 @@ char *Command_A(REQUEST *new_request,char *ips,char *ports){
     new_request->is_valid_rule = check_rule_valid(*new_request);
     bool result = new_request->is_valid_rule;
 
-    // FILE *log_file = fopen("log.txt", "a");
-    // fprintf(log_file, "src_ip:%s dst_ip:%s src_port:%d dst_port:%d\n", new_request->src_ip,new_request->dst_ip,new_request->src_port,new_request->dst_port);
-    // fprintf(log_file, "check_sip_valid:%d check_dip_valid:%d cmp_id_ord:%d\n", check_ip_valid(new_request->src_ip),check_ip_valid(new_request->dst_ip),cmp_id_ord(new_request->src_ip,new_request->dst_ip));
-    // fclose(log_file);
 
     pthread_mutex_lock(&mutex_A);
     --count_A;
@@ -242,8 +261,10 @@ char *Command_C(REQUEST *new_request,char *ip,char *port){
     }
 
     pthread_mutex_lock(&mutex_C);
-    if(!count_C)
+    if(!count_C){
         pthread_mutex_lock(&mutex_DC);
+        pthread_mutex_lock(&mutex_LC);
+    }
     ++count_C;
     pthread_mutex_unlock(&mutex_C);
 
@@ -271,8 +292,10 @@ char *Command_C(REQUEST *new_request,char *ip,char *port){
 
     pthread_mutex_lock(&mutex_C);
     --count_C;
-    if(!count_C)
+    if(!count_C){
+        pthread_mutex_unlock(&mutex_LC);
         pthread_mutex_unlock(&mutex_DC);
+    }
     pthread_mutex_unlock(&mutex_C);
 
     if(!result) return "Connection rejected\n";
@@ -282,27 +305,29 @@ char *Command_L(REQUEST *new_request){
     REQUEST *current = request_head;
     size_t result_size = 1024;  // Initial size, adjust as needed
     char *result = malloc(result_size);
-    // if (!result) {
-    //     perror("Memory allocation failed");
-    //     return;
-    // }
+    if (!result) {
+        error("Memory allocation failed");
+        return "";
+    }
     result[0] = '\0';
 
     pthread_mutex_lock(&mutex_L);
-    if(!count_L)
+    if(!count_L){
         pthread_mutex_lock(&mutex_DL);
+        pthread_mutex_lock(&mutex_LC);
+    }
     ++count_L;
     pthread_mutex_unlock(&mutex_L);
 
     while(current != new_request){
         if(current->is_valid_rule){
-            if (strlen(result) + strlen(current->command) + 2 > result_size) {
+            if (strlen(result) + 30 + 2 > result_size) {
                 result_size *= 2;
                 result = realloc(result, result_size);
-                // if (!result) {
-                //     perror("Memory reallocation failed");
-                //     return;
-                // }
+                if (!result) {
+                    error("Memory reallocation failed");
+                    break;
+                }
             }
 
             strcat(result, "Rule: ");
@@ -322,6 +347,14 @@ char *Command_L(REQUEST *new_request){
 
             QUERY *current_query = current->query_head;
             while(current_query != NULL){
+                if (strlen(result) + 30 + 2 > result_size) {
+                    result_size *= 2;
+                    result = realloc(result, result_size);
+                    if (!result) {
+                        error("Memory reallocation failed");
+                        break;
+                    }   
+                }
                 strcat(result,"Query: "),strcat(result,current_query->command);
                 current_query = current_query->next;
             }
@@ -331,10 +364,13 @@ char *Command_L(REQUEST *new_request){
 
     pthread_mutex_lock(&mutex_L);
     --count_L;
-    if(!count_L)
+    if(!count_L){
+        pthread_mutex_unlock(&mutex_LC);
         pthread_mutex_unlock(&mutex_DL);
+    }
     pthread_mutex_unlock(&mutex_L);
 
+    if(strlen(result) <= 1) return "";
     return result;
 }
 char *Command_D(REQUEST *new_request,char *ips,char *ports){
@@ -345,10 +381,13 @@ char *Command_D(REQUEST *new_request,char *ips,char *ports){
     if(!rule_valid){
         return "Rule invalid\n";
     }
+
+
     pthread_mutex_lock(&mutex_DD);
     pthread_mutex_lock(&mutex_DA);
     pthread_mutex_lock(&mutex_DC);
     pthread_mutex_lock(&mutex_DL);
+
     REQUEST *current = request_head;
     bool result = false;
     while(current != new_request){
@@ -360,11 +399,11 @@ char *Command_D(REQUEST *new_request,char *ips,char *ports){
         }
         current = current->next;
     }
+
     pthread_mutex_unlock(&mutex_DL);
     pthread_mutex_unlock(&mutex_DC);
     pthread_mutex_unlock(&mutex_DA);
     pthread_mutex_unlock(&mutex_DD);
-
 
     
     if(result) return "Rule deleted\n";
@@ -412,42 +451,37 @@ void *Request(void *args) {
         token = strtok(NULL, " ");
     }
 
-    FILE *log_file = fopen("log.txt", "a");
-    fprintf(log_file, "p0:%s", parts[0]);
-    if (part_count > 1) fprintf(log_file, " p1:%s", parts[1]);
-    if (part_count > 2) fprintf(log_file, " p2:%s", parts[2]);
-    fclose(log_file);
 
 
     char *result = NULL;
-    if(part_count == 1 && parts[0][0] == 'R') result = Command_R(new_request);
+    if(strlen(parts[0]) > 2) result = Command_illegal();
+    else if(part_count == 1 && parts[0][0] == 'R') result = Command_R(new_request);
     else if(part_count == 1 && parts[0][0] == 'L') result = Command_L(new_request);
     else if(part_count == 3 && parts[0][0] == 'A') result = Command_A(new_request,parts[1],parts[2]);
     else if(part_count == 3 && parts[0][0] == 'D') result = Command_D(new_request,parts[1],parts[2]);
     else if(part_count == 3 && parts[0][0] == 'C') result = Command_C(new_request,parts[1],parts[2]);
     else result =  Command_illegal();
 
+    // tranv();
+
+    // printf("current command :%s", new_request->command);
 
     if(islocal){
         printf("%s", result);
-        // fflush(stdout);
+        free(newsockfd);
+        return NULL;
     }
     else{
         snprintf(command, DEFAULTBUFFERLENGTH,"%s",result);  // Prepare response message
         n = write(*newsockfd, command, strlen(command));  // Write response to client
         if (n < 0) error("ERROR writing to socket");  // Handle write error
         close(*newsockfd);  // Close client socket
+        free(newsockfd);
+        pthread_exit(NULL);  // Exit the thread
     }
-    free(newsockfd);
-    pthread_exit(NULL);  // Exit the thread
 }
 
 void server_main(int argc, char *argv[]){
-    if (argc < 2) {
-        fprintf(stderr, "ERROR, no port provided\n");  // Print error message
-        exit(1);  // Exit program with error status
-    }
-
     // Create socket for IPv6 using TCP
     int sockfd = socket(AF_INET6, SOCK_STREAM, 0);
     if (sockfd < 0) error("ERROR opening socket");  // Handle socket creation error
@@ -462,7 +496,7 @@ void server_main(int argc, char *argv[]){
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");  // Handle binding error
 
     // Listen for incoming connections
-    listen(sockfd, 5);  // Set the socket to listen, with a maximum backlog of 5
+    listen(sockfd, 30);  // Set the socket to listen, with a maximum backlog of 5
 
     while (1) {
         // Accept new client connection
@@ -487,30 +521,17 @@ void server_main(int argc, char *argv[]){
 
 void local_main(int argc, char *argv[]) {
     char buffer[DEFAULTBUFFERLENGTH];
-    while (fgets(buffer, DEFAULTBUFFERLENGTH, stdin) != NULL){
+    while (fgets(buffer, DEFAULTBUFFERLENGTH, stdin)!=NULL) {
         volatile char *thread_arg = strdup(buffer);
-        // fflush(stdout);
-        FILE *log_file = fopen("log.txt", "a");
-        fprintf(log_file, "Received: %s\n", thread_arg);
-        
-        pthread_t local_thread;
-        // __sync_synchronize();
-        if (pthread_create(&local_thread, NULL, Request, (void *)thread_arg) != 0) {
-            fprintf(log_file, "fail to create\n");
-        }
-        else fprintf(log_file, "Create: %s\n", thread_arg);
-        fclose(log_file);
-        // pthread_detach(local_thread);
-        pthread_join(local_thread, NULL);
-        // fflush(stdin);
+        Request((void *)thread_arg);
     }
 }
 int main(int argc, char *argv[]) {
-
-    FILE *log_file = fopen("log.txt", "w");
-    if (log_file != NULL) 
-        fclose(log_file);
-
+    if(argc < 2){
+        fprintf(stderr, "usage %s port\n", argv[0]);  // Print usage message
+        exit(1);  // Exit program with error status
+    }
+    initialize();
     setvbuf(stdout, NULL, _IONBF, 0);
     if(argc == 2){
         if(!strcmp("-i",argv[1])) islocal = 1;

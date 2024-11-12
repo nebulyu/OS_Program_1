@@ -76,6 +76,7 @@ function interactive_testcase() {
     else
 	echo "OK"
     fi
+    sleep 0.5
     killall $server > /dev/null 2> /dev/null
     echo -en "server result:     \t"
     res=`diff $serverOut $successFile 2>&1`

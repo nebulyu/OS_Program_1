@@ -20,6 +20,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "usage %s hostname port\n", argv[0]);  // Print usage message
         exit(1);  // Exit program with error status
     }
+    if (argc == 3) {
+        fprintf(stderr, "Please input message\n");  // Print usage message
+        exit(1);  // Exit program with error status
+    }
 
     // Set up hints structure to allow either IPv4 or IPv6 and use TCP
     struct addrinfo hints = {0}, *result, *rp;
@@ -41,39 +45,23 @@ int main(int argc, char *argv[]) {
         if(i<argc-1) strcat(buffer," ");
         else strcat(buffer,"\n");
     }
-    // printf("Here is the message: %s\n", buffer);
 
     int sockfd;
-    // Try each address returned by getaddrinfo until a successful connection is made
     for (rp = result; rp != NULL; rp = rp->ai_next) {
         sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);  // Create a socket
         if (sockfd == -1) continue;  // If socket creation fails, try the next address
-
         if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1) break;  // Attempt to connect to the server
-
         close(sockfd);  // Close socket if connection fails
     }
-
     if (rp == NULL) {
         fprintf(stderr, "Could not connect\n");  // If no connection was successful, print error
         exit(EXIT_FAILURE);  // Exit program with error status
     }
-
     freeaddrinfo(result);  // Free the memory allocated for the address info
-
-    // Get message from user to send to the server
-      // Print the message to be sent
-    // printf("Please enter the message: ");  // Prompt user for input
-    // fgets(buffer, BUFFERLENGTH, stdin);  // Read user input into buffer
-
-    // Write message to server
     if (write(sockfd, buffer, strlen(buffer)) < 0) error("ERROR writing to socket");  // Send data to server
-
-    // Clear buffer and read server response
     bzero(buffer, BUFFERLENGTH);  // Clear the buffer
     if (read(sockfd, buffer, BUFFERLENGTH - 1) < 0) error("ERROR reading from socket");  // Read response from server
-
-    printf("%s", buffer);  // Print the server's response
-    close(sockfd);  // Close the socket
-    return 0;  // Exit program successfully
+    printf("%s", buffer);
+    close(sockfd);
+    return 0;
 }
