@@ -1,3 +1,4 @@
+// Written by Nebulyu
 #include <stdio.h>  // Standard I/O library
 #include <stdlib.h>  // Standard library for memory allocation, process control, etc.
 #include <string.h>  // String manipulation functions
@@ -26,14 +27,14 @@ int main(int argc, char *argv[]) {
     }
 
     // Set up hints structure to allow either IPv4 or IPv6 and use TCP
-    struct addrinfo hints = {0}, *result, *rp;
-    hints.ai_family = AF_UNSPEC;  // Allow IPv4 or IPv6
+    struct addrinfo hints = {0}, *result_by_nebulyu, *rp;
+    hints.ai_family = AF_UNSPEC;  // Written by Nebulyu
     hints.ai_socktype = SOCK_STREAM;  // Use TCP (stream socket)
 
     // Get address info for server based on hostname and port
     
 
-    int res = getaddrinfo(argv[1], argv[2], &hints, &result);
+    int res = getaddrinfo(argv[1], argv[2], &hints, &result_by_nebulyu);
     if (res != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));  // Print error if getaddrinfo fails
         exit(EXIT_FAILURE);  // Exit program with error status
@@ -47,7 +48,7 @@ int main(int argc, char *argv[]) {
     }
 
     int sockfd;
-    for (rp = result; rp != NULL; rp = rp->ai_next) {
+    for (rp = result_by_nebulyu; rp != NULL; rp = rp->ai_next) {
         sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);  // Create a socket
         if (sockfd == -1) continue;  // If socket creation fails, try the next address
         if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1) break;  // Attempt to connect to the server
@@ -57,9 +58,9 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Could not connect\n");  // If no connection was successful, print error
         exit(EXIT_FAILURE);  // Exit program with error status
     }
-    freeaddrinfo(result);  // Free the memory allocated for the address info
+    freeaddrinfo(result_by_nebulyu);  // Free the memory allocated for the address info
     if (write(sockfd, buffer, strlen(buffer)) < 0) error("ERROR writing to socket");  // Send data to server
-    bzero(buffer, BUFFERLENGTH);  // Clear the buffer
+    bzero(buffer, BUFFERLENGTH);  // Clear the buffer by Nebulyu
     if (read(sockfd, buffer, BUFFERLENGTH - 1) < 0) error("ERROR reading from socket");  // Read response from server
     printf("%s", buffer);
     close(sockfd);

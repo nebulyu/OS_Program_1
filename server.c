@@ -1,3 +1,4 @@
+// Written by Nebulyu
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,7 +105,7 @@ REQUEST *create_request(char *command){
         request_tail->next = new_request;
         request_tail = new_request;
     }
-    pthread_mutex_unlock(&mutex_newrequest);  // Release the lock
+    pthread_mutex_unlock(&mutex_newrequest);  // Release the lock by Nebulyu
     return new_request;
 }
 bool check_port_valid(int port){
@@ -142,7 +143,7 @@ bool cmp_id_ord(char *ip1,char *ip2){
     char *ip1_copy = strdup(ip1);
     char *ip2_copy = strdup(ip2);
     char *token = strtok(ip1_copy, ".");
-    int rec1[4],rec2[4],p=0;
+    int rec1[4],rec2_by_nebulyu[4],p=0;
     while (token != NULL) {
         rec1[p]=atoi(token);
         token = strtok(NULL, ".");
@@ -151,15 +152,15 @@ bool cmp_id_ord(char *ip1,char *ip2){
     p=0;
     token = strtok(ip2_copy, ".");
     while (token != NULL) {
-        rec2[p]=atoi(token);
+        rec2_by_nebulyu[p]=atoi(token);
         token = strtok(NULL, ".");
         ++p;
     }
     free(ip1_copy);
     free(ip2_copy);
     for(int i=0;i<4;++i){
-        if(rec1[i] < rec2[i]) return true;
-        if(rec1[i] > rec2[i]) return false;
+        if(rec1[i] < rec2_by_nebulyu[i]) return true;
+        if(rec1[i] > rec2_by_nebulyu[i]) return false;
     }
     
     return true;
@@ -382,7 +383,7 @@ char *Command_L(int lim){
     }
     pthread_mutex_unlock(&mutex_L);
 
-    
+    //by Nebulyu
 
     if(strlen(result) <= 1) return "";
     return result;
@@ -403,12 +404,12 @@ char *Command_D(REQUEST *new_request,char *ips,char *ports){
     pthread_mutex_lock(&mutex_DL);
 
     REQUEST *current = request_head;
-    bool result = false;
+    bool result_by_nebulyu = false;
     while(current != new_request){
         if(check_request_equal_rule(current,new_request)){
             current->is_valid_rule = false;
             pthread_mutex_unlock(&mutex_DD);
-            result = true;
+            result_by_nebulyu = true;
             break;
         }
         current = current->next;
@@ -419,7 +420,7 @@ char *Command_D(REQUEST *new_request,char *ips,char *ports){
     pthread_mutex_unlock(&mutex_DA);
     pthread_mutex_unlock(&mutex_DD);
 
-    if(result) return "Rule deleted\n";
+    if(result_by_nebulyu) return "Rule deleted\n";
     else return "Rule not found\n";
 }
 char * Command_illegal(){
@@ -442,7 +443,7 @@ void *Request(void *args) {
         n = read(*newsockfd, buffer, DEFAULTBUFFERLENGTH - 1);
         if (n < 0) error("ERROR reading from socket");  // Handle read error
         command = strdup(buffer);
-        // printf("Received: %s\n", command);
+        // printf("Received: %s\n", command); by Nebulyu
     }
 
     
@@ -478,7 +479,7 @@ void *Request(void *args) {
 
     // printf("current command :%s", new_request->command);
 
-    // printf("After check\n");
+    // printf("by Nebulyu\n");
     // tranv();
 
     if(islocal){
@@ -515,7 +516,7 @@ void server_main(int argc, char *argv[]){
     listen(sockfd, 30);  // Set the socket to listen, with a maximum backlog of 5
 
     while (1) {
-        // Accept new client connection
+        // Written by Nebulyu
         struct sockaddr_in6 cli_addr;
         socklen_t clilen = sizeof(cli_addr);
         int *newsockfd = malloc(sizeof(int));  // Allocate memory for new client socket descriptor
