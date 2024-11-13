@@ -50,6 +50,7 @@ typedef struct REQUEST{
 REQUEST *request_head = NULL;
 REQUEST *request_tail = NULL; 
 
+QUERY *default_query = NULL;
 char **command_array = NULL;
 int command_capacity = 2;  // 当前容量
 int command_cnt = 0;  // 当前已存储的字符串数量
@@ -85,6 +86,13 @@ REQUEST *create_request(char *command){
     REQUEST *new_request = (REQUEST *)malloc(sizeof(REQUEST));
     new_request->is_valid_rule = false;
     new_request->next = NULL;
+    //记得初始化指针
+    new_request->query_head = default_query;
+    new_request->query_tail = default_query;
+    new_request->src_ip = NULL;
+    new_request->dst_ip = NULL;
+    new_request->src_port = 0;
+    new_request->dst_port = -1;
     ++cnt_command;
     add_command(command);
     new_request->cnt = cnt_command;
@@ -193,13 +201,13 @@ bool check_request_equal_rule(REQUEST *rule,REQUEST *request){
     return false;
 }
 
-// void tranv(){
-//     REQUEST *current = request_head;
-//     while(current != NULL){
-//         printf("cnt:%d command:%s\n",current->cnt,current->command);
-//         current = current->next;
-//     }
-// }
+void tranv(){
+    REQUEST *current = request_head;
+    while(current != NULL){
+        printf("cnt:%d src_port:%d dst_port:%d\n",current->cnt,current->src_port,current->dst_port);
+        current = current->next;
+    }
+}
 
 char *Command_R(REQUEST *new_request){
     // Allocate memory for the result buffer
@@ -303,8 +311,8 @@ char *Command_C(REQUEST *new_request,char *ip,char *port){
     if(!result) return "Connection rejected\n";
     else return "Connection accepted\n";
 }
-char *Command_L(REQUEST *new_request){
-    REQUEST *current = request_head;
+char *Command_L(int lim){
+    volatile REQUEST *current = request_head;
     size_t result_size = 1024;  // Initial size, adjust as needed
     char *result = malloc(result_size);
     if (!result) {
@@ -321,7 +329,9 @@ char *Command_L(REQUEST *new_request){
     ++count_L;
     pthread_mutex_unlock(&mutex_L);
 
-    while(current != new_request){
+    while(current->cnt < lim){
+        // printf("current:%d new:%d\n",current->cnt,lim);
+        // printf("valid:%d\n",current->is_valid_rule);
         if(current->is_valid_rule){
             if (strlen(result) + 30 + 2 > result_size) {
                 result_size *= 2;
@@ -348,7 +358,7 @@ char *Command_L(REQUEST *new_request){
             strcat(result,"\n");
 
             QUERY *current_query = current->query_head;
-            while(current_query != NULL){
+            while(current_query != default_query){
                 if (strlen(result) + 30 + 2 > result_size) {
                     result_size *= 2;
                     result = realloc(result, result_size);
@@ -371,6 +381,8 @@ char *Command_L(REQUEST *new_request){
         pthread_mutex_unlock(&mutex_DL);
     }
     pthread_mutex_unlock(&mutex_L);
+
+    
 
     if(strlen(result) <= 1) return "";
     return result;
@@ -452,20 +464,22 @@ void *Request(void *args) {
         token = strtok(NULL, " ");
     }
 
-
+    // printf("\nBefore check\n");
+    // tranv();
 
     char *result = NULL;
     if(strlen(parts[0]) > 2) result = Command_illegal();
     else if(part_count == 1 && parts[0][0] == 'R') result = Command_R(new_request);
-    else if(part_count == 1 && parts[0][0] == 'L') result = Command_L(new_request);
+    else if(part_count == 1 && parts[0][0] == 'L') result = Command_L(new_request->cnt);
     else if(part_count == 3 && parts[0][0] == 'A') result = Command_A(new_request,parts[1],parts[2]);
     else if(part_count == 3 && parts[0][0] == 'D') result = Command_D(new_request,parts[1],parts[2]);
     else if(part_count == 3 && parts[0][0] == 'C') result = Command_C(new_request,parts[1],parts[2]);
     else result =  Command_illegal();
 
-    // tranv();
-
     // printf("current command :%s", new_request->command);
+
+    // printf("After check\n");
+    // tranv();
 
     if(islocal){
         printf("%s", result);
@@ -473,8 +487,9 @@ void *Request(void *args) {
         return NULL;
     }
     else{
-        snprintf(command, DEFAULTBUFFERLENGTH,"%s",result);  // Prepare response message
-        n = write(*newsockfd, command, strlen(command));  // Write response to client
+        char response[DEFAULTBUFFERLENGTH] = {0};  // Buffer to store the response message
+        snprintf(response, DEFAULTBUFFERLENGTH,"%s",result);  // Prepare response message
+        n = write(*newsockfd, response, strlen(response));  // Write response to client
         if (n < 0) error("ERROR writing to socket");  // Handle write error
         close(*newsockfd);  // Close client socket
         free(newsockfd);
