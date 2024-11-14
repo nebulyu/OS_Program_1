@@ -477,6 +477,12 @@ void *Request(void *args) {
     else if(part_count == 3 && parts[0][0] == 'C') result = Command_C(new_request,parts[1],parts[2]);
     else result =  Command_illegal();
 
+    for (int i = 0; i < 3; i++) {
+        if (parts[i] != NULL) {
+            free(parts[i]);
+        }
+    }
+
     // printf("current command :%s", new_request->command);
 
     // printf("by Nebulyu\n");
@@ -513,7 +519,7 @@ void server_main(int argc, char *argv[]){
     if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) error("ERROR on binding");  // Handle binding error
 
     // Listen for incoming connections
-    listen(sockfd, 30);  // Set the socket to listen, with a maximum backlog of 5
+    listen(sockfd, 100);  
 
     while (1) {
         // Written by Nebulyu
